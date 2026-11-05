@@ -1,0 +1,12 @@
+{
+    "mcpServers": {
+        "laravel-boost": {
+            "command": "wsl.exe",
+            "args": [
+                "/home/codrut/.config/herd-lite/bin/php",
+                "/home/codrut/work/codrut/garmin_mcp/artisan",
+                "boost:mcp"
+            ]
+        }
+    }
+}

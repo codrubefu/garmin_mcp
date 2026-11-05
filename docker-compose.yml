@@ -1,0 +1,20 @@
+services:
+  app:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      # Keeps sessions, the Garmin token and the used-token list across restarts.
+      - storage:/app/storage
+      # Keeps the HTTPS certificates.
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  storage:
+  caddy_data:
+  caddy_config:

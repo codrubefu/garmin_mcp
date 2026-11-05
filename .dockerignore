@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+.git
+.claude
+vendor
+tests
+node_modules
+bootstrap/cache/*.php
+storage/logs/*.log
+storage/framework/cache/data/*
+storage/framework/sessions/*
+storage/framework/views/*.php
