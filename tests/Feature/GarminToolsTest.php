@@ -2,13 +2,13 @@
 
 namespace Tests\Feature;
 
-use PHPUnit\Framework\Attributes\DataProvider;
 use App\Accounts\Account;
 use App\Mcp\Servers\GarminServer;
 use App\Mcp\Tools;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class GarminToolsTest extends TestCase

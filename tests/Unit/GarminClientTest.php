@@ -2,13 +2,13 @@
 
 namespace Tests\Unit;
 
-use PHPUnit\Framework\Attributes\DataProvider;
 use App\Accounts\Account;
 use App\Garmin\GarminClient;
 use App\Garmin\GarminException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Http;
+use PHPUnit\Framework\Attributes\DataProvider;
 use Tests\TestCase;
 
 class GarminClientTest extends TestCase

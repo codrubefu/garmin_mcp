@@ -6,6 +6,7 @@ use App\OAuth\SealedTokens;
 use Illuminate\Http\Client\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
@@ -94,7 +95,7 @@ class McpEndpointTest extends TestCase
 
         Config::set('app.key', 'base64:'.base64_encode(random_bytes(32)));
         $this->app->forgetInstance('encrypter');
-        \Illuminate\Support\Facades\Crypt::clearResolvedInstance('encrypter');
+        Crypt::clearResolvedInstance('encrypter');
 
         $this->rpc('initialize', [], $this->bearer($token))->assertUnauthorized();
     }
