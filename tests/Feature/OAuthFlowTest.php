@@ -17,11 +17,16 @@ class OAuthFlowTest extends TestCase
 
     private const PASSWORD = 'correct horse battery staple';
 
+    private const OTHER_PASSWORD = 'vio has another password';
+
     protected function setUp(): void
     {
         parent::setUp();
 
-        config(['connector.password_hash' => Hash::make(self::PASSWORD)]);
+        config(['connector.accounts' => [
+            'codrut' => ['password_hash' => Hash::make(self::PASSWORD), 'garmin_api_key' => null],
+            'vio' => ['password_hash' => Hash::make(self::OTHER_PASSWORD), 'garmin_api_key' => null],
+        ]]);
     }
 
     private function challenge(string $verifier = self::VERIFIER): string
@@ -39,7 +44,7 @@ class OAuthFlowTest extends TestCase
             'state' => 'state-1',
             'code_challenge' => $this->challenge(),
             'code_challenge_method' => 'S256',
-            'resource' => 'https://garmin.test/mcp',
+            'resource' => 'https://garmin.test/mcp/codrut',
             ...$overrides,
         ];
     }
@@ -76,11 +81,11 @@ class OAuthFlowTest extends TestCase
 
     public function test_metadata_points_at_this_server(): void
     {
-        $this->get('/.well-known/oauth-protected-resource/mcp')
+        $this->get('/.well-known/oauth-protected-resource/mcp/codrut')
             ->assertOk()
-            ->assertJson(['resource' => 'https://garmin.test/mcp', 'authorization_servers' => ['https://garmin.test']]);
+            ->assertJson(['resource' => 'https://garmin.test/mcp/codrut', 'authorization_servers' => ['https://garmin.test']]);
 
-        $this->get('/.well-known/oauth-protected-resource')->assertJsonPath('resource', 'https://garmin.test/mcp');
+        $this->get('/.well-known/oauth-protected-resource/mcp/vio')->assertJsonPath('resource', 'https://garmin.test/mcp/vio');
 
         $this->get('/.well-known/oauth-authorization-server')
             ->assertOk()
@@ -93,6 +98,13 @@ class OAuthFlowTest extends TestCase
                 'token_endpoint_auth_methods_supported' => ['none'],
                 'scopes_supported' => ['mcp:use', 'offline_access'],
             ]);
+    }
+
+    public function test_metadata_is_not_found_for_unknown_users(): void
+    {
+        $this->get('/.well-known/oauth-protected-resource/mcp/ana')->assertNotFound();
+        $this->get('/.well-known/oauth-protected-resource/mcp')->assertNotFound();
+        $this->get('/.well-known/oauth-protected-resource')->assertNotFound();
     }
 
     public function test_registration_accepts_claude_and_rejects_others(): void
@@ -141,6 +153,8 @@ class OAuthFlowTest extends TestCase
         $this->get('/oauth/authorize?'.http_build_query($this->authorizeParams()))
             ->assertOk()
             ->assertSee('claude.ai')
+            ->assertSee('codrut')
+            ->assertDontSee('name="username"', false)
             ->assertSee('name="_token"', false)
             ->assertHeader('X-Frame-Options', 'DENY')
             ->assertHeader('Referrer-Policy', 'no-referrer');
@@ -182,9 +196,67 @@ class OAuthFlowTest extends TestCase
 
     public function test_login_fails_when_no_password_is_configured(): void
     {
-        config(['connector.password_hash' => '']);
+        config(['connector.accounts.codrut.password_hash' => '']);
 
         $this->login(password: '')->assertStatus(422);
+    }
+
+    public function test_another_users_password_does_not_open_this_account(): void
+    {
+        $this->login(password: self::OTHER_PASSWORD)->assertStatus(422);
+        $this->login(['resource' => 'https://garmin.test/mcp/vio'], self::OTHER_PASSWORD)->assertRedirect();
+    }
+
+    public function test_an_unknown_user_is_rejected(): void
+    {
+        $location = $this->get('/oauth/authorize?'.http_build_query($this->authorizeParams(['resource' => 'https://garmin.test/mcp/ana'])))
+            ->headers->get('Location');
+
+        $this->assertStringContainsString('error=invalid_target', $location);
+    }
+
+    public function test_without_a_resource_the_form_asks_for_the_user_name(): void
+    {
+        $params = $this->authorizeParams();
+        unset($params['resource']);
+
+        $this->get('/oauth/authorize?'.http_build_query($params))->assertOk()->assertSee('name="username"', false);
+
+        $this->withoutMiddleware(PreventRequestForgery::class)
+            ->post('/oauth/authorize', [...$params, 'username' => 'ana', 'password' => self::PASSWORD])
+            ->assertStatus(422)
+            ->assertSee('Wrong user name or password');
+
+        $location = $this->withoutMiddleware(PreventRequestForgery::class)
+            ->post('/oauth/authorize', [...$params, 'username' => 'vio', 'password' => self::OTHER_PASSWORD])
+            ->assertRedirect()
+            ->headers->get('Location');
+
+        parse_str((string) parse_url($location, PHP_URL_QUERY), $query);
+        $token = $this->exchange($query['code'])->assertOk()->json('access_token');
+
+        $this->assertSame('https://garmin.test/mcp/vio', app(SealedTokens::class)->open($token, SealedTokens::ACCESS)['aud']);
+    }
+
+    public function test_tokens_are_issued_for_the_user_who_logged_in(): void
+    {
+        $tokens = $this->exchange($this->code())->json();
+        $refreshed = $this->refresh($tokens['refresh_token'])->json('access_token');
+
+        foreach ([$tokens['access_token'], $refreshed] as $token) {
+            $this->assertSame('https://garmin.test/mcp/codrut', app(SealedTokens::class)->open($token, SealedTokens::ACCESS)['aud']);
+        }
+
+        $this->exchange($this->code(), ['resource' => 'https://garmin.test/mcp/vio'])->assertStatus(400);
+    }
+
+    public function test_a_removed_user_cannot_refresh(): void
+    {
+        $token = $this->exchange($this->code())->json('refresh_token');
+
+        config(['connector.accounts' => []]);
+
+        $this->refresh($token)->assertStatus(400)->assertJsonPath('error', 'invalid_grant');
     }
 
     public function test_login_attempts_are_throttled(): void

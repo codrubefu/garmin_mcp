@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Accounts\Account;
 use App\Mcp\Servers\GarminServer;
 use App\Mcp\Tools;
 use Illuminate\Http\Client\Request;
@@ -20,7 +21,8 @@ class GarminToolsTest extends TestCase
     {
         parent::setUp();
 
-        config(['garmin.base_url' => 'https://garmin.test', 'garmin.api_key' => 'key']);
+        config(['garmin.base_url' => 'https://garmin.test']);
+        $this->app->instance(Account::class, new Account('codrut', null, 'key'));
         Cache::put('garmin:token:'.hash('sha256', 'key'), 'jwt', 3600);
     }
 

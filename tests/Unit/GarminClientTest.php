@@ -3,6 +3,7 @@
 namespace Tests\Unit;
 
 use PHPUnit\Framework\Attributes\DataProvider;
+use App\Accounts\Account;
 use App\Garmin\GarminClient;
 use App\Garmin\GarminException;
 use Illuminate\Http\Client\ConnectionException;
@@ -20,7 +21,13 @@ class GarminClientTest extends TestCase
     {
         parent::setUp();
 
-        config(['garmin.base_url' => 'https://garmin.test', 'garmin.api_key' => 'secret-key']);
+        config(['garmin.base_url' => 'https://garmin.test']);
+        $this->useAccount('secret-key');
+    }
+
+    private function useAccount(?string $apiKey): void
+    {
+        $this->app->instance(Account::class, new Account('codrut', null, $apiKey));
     }
 
     private function jwt(int $expiresIn = 86400): string
@@ -74,7 +81,7 @@ class GarminClientTest extends TestCase
         Http::fake([self::TOKEN_URL => Http::response($this->jwt()), self::DATA_URL => Http::response([])]);
 
         app(GarminClient::class)->get('/data');
-        config(['garmin.api_key' => 'new-key']);
+        $this->useAccount('new-key');
         app(GarminClient::class)->get('/data');
 
         Http::assertSent(fn (Request $r) => $r->hasHeader('Authorization', 'ApiKey new-key'));
@@ -118,9 +125,9 @@ class GarminClientTest extends TestCase
 
     public function test_a_missing_key_is_reported(): void
     {
-        config(['garmin.api_key' => null]);
+        $this->useAccount(null);
 
-        $this->expectExceptionMessage('GARMIN_PERSONAL_API_KEY is not set');
+        $this->expectExceptionMessage('GARMIN_API_KEY_CODRUT is not set');
 
         app(GarminClient::class)->get('/data');
     }

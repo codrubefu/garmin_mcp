@@ -7,8 +7,7 @@ use App\Http\Controllers\OAuth\TokenController;
 use App\Http\Middleware\SecureLoginPage;
 use Illuminate\Support\Facades\Route;
 
-Route::get('/.well-known/oauth-protected-resource', [MetadataController::class, 'protectedResource']);
-
+// Every account has its own resource, so only the path form exists, e.g. /.well-known/oauth-protected-resource/mcp/codrut.
 // Laravel MCP's 401 middleware looks for this route name to build resource_metadata.
 Route::get('/.well-known/oauth-protected-resource/{path}', [MetadataController::class, 'protectedResource'])
     ->where('path', '.*')

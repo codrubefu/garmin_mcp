@@ -2,6 +2,7 @@
 
 namespace App\Garmin;
 
+use App\Accounts\Account;
 use Illuminate\Contracts\Cache\LockTimeoutException;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
@@ -15,6 +16,8 @@ class GarminClient
 
     /** Reuse a token only while it has more than this many seconds left. */
     private const REFRESH_WINDOW = 3600;
+
+    public function __construct(private Account $account) {}
 
     /**
      * @param  array<string, scalar>  $query
@@ -79,7 +82,7 @@ class GarminClient
         if (in_array($response->status(), [401, 403], true)) {
             throw new GarminException(
                 'Garmin rejected the Personal API key, which has probably expired. Create a new key at '
-                .self::KEY_URL.' and update GARMIN_PERSONAL_API_KEY on the server.',
+                .self::KEY_URL.' and update '.$this->apiKeyVariable().' on the server.',
                 $response->status(),
             );
         }
@@ -129,8 +132,13 @@ class GarminClient
 
     private function apiKey(): string
     {
-        return (string) config('garmin.api_key')
-            ?: throw new GarminException('GARMIN_PERSONAL_API_KEY is not set on the server.');
+        return (string) $this->account->garminApiKey
+            ?: throw new GarminException($this->apiKeyVariable().' is not set on the server.');
+    }
+
+    private function apiKeyVariable(): string
+    {
+        return Account::envName('GARMIN_API_KEY', $this->account->name);
     }
 
     /** Tied to the key, so replacing the key stops the old token being used. */

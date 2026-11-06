@@ -1,7 +1,19 @@
 <?php
 
+use App\Accounts\Account;
+
+// MCP_USERS lists the accounts, for example "codrut,vio". Each one is served at /mcp/{name}
+// and reads MCP_PASSWORD_HASH_{NAME} and GARMIN_API_KEY_{NAME}.
+$accountNames = array_filter(
+    array_map(fn (string $name): string => strtolower(trim($name)), explode(',', (string) env('MCP_USERS', ''))),
+    fn (string $name): bool => preg_match('/^'.Account::NAME_PATTERN.'$/D', $name) === 1,
+);
+
 return [
-    'password_hash' => env('MCP_OWNER_PASSWORD_HASH'),
+    'accounts' => array_combine($accountNames, array_map(fn (string $name): array => [
+        'password_hash' => env(Account::envName('MCP_PASSWORD_HASH', $name)),
+        'garmin_api_key' => env(Account::envName('GARMIN_API_KEY', $name)),
+    ], $accountNames)),
 
     'scope' => 'mcp:use',
 

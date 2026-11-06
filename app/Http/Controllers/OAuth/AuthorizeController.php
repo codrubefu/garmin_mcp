@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\OAuth;
 
+use App\Accounts\Account;
 use App\OAuth\RedirectUris;
 use App\OAuth\SealedTokens;
 use Illuminate\Http\RedirectResponse;
@@ -25,11 +26,16 @@ class AuthorizeController
             return $rejection;
         }
 
-        if (! $this->passwordMatches($request->input('password'))) {
-            return $this->form($request, 'Wrong password.', 422);
+        $account = $this->account($request);
+
+        if ($account === null || ! $this->passwordMatches($account, $request->input('password'))) {
+            $error = $request->filled('resource') ? 'Wrong password.' : 'Wrong user name or password.';
+
+            return $this->form($request, $error, 422);
         }
 
         $code = $tokens->seal(SealedTokens::CODE, [
+            'user' => $account->name,
             'client_id' => $request->input('client_id'),
             'redirect_uri' => $request->input('redirect_uri'),
             'code_challenge' => $request->input('code_challenge'),
@@ -59,7 +65,7 @@ class AuthorizeController
             return $this->redirectToClient($request, ['error' => 'invalid_request', 'error_description' => 'S256 PKCE is required.']);
         }
 
-        if ($request->filled('resource') && $request->input('resource') !== url('/mcp')) {
+        if ($request->filled('resource') && Account::fromResource($request->input('resource')) === null) {
             return $this->redirectToClient($request, ['error' => 'invalid_target']);
         }
 
@@ -71,13 +77,22 @@ class AuthorizeController
         return response()->view('oauth.authorize', [
             'params' => array_filter($request->only(self::PARAMS), is_string(...)),
             'host' => parse_url($request->input('redirect_uri'), PHP_URL_HOST),
+            'account' => Account::fromResource($request->input('resource')),
             'error' => $error,
         ], $status);
     }
 
-    private function passwordMatches(mixed $password): bool
+    /** The account comes from the resource URL, or from the user name typed on the form when a client sends no resource. */
+    private function account(Request $request): ?Account
     {
-        $hash = config('connector.password_hash');
+        return $request->filled('resource')
+            ? Account::fromResource($request->input('resource'))
+            : Account::find($request->input('username'));
+    }
+
+    private function passwordMatches(Account $account, mixed $password): bool
+    {
+        $hash = $account->passwordHash;
 
         return is_string($password) && is_string($hash) && $hash !== '' && Hash::check($password, $hash);
     }

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\OAuth;
 
+use App\Accounts\Account;
 use App\OAuth\SealedTokens;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -22,26 +23,32 @@ class TokenController
     private function exchangeCode(Request $request): JsonResponse
     {
         $claims = $this->tokens->open($request->input('code'), SealedTokens::CODE);
+        $account = Account::find($claims['user'] ?? null);
 
         $isValid = $claims !== null
+            && $account !== null
             && $request->input('client_id') === $claims['client_id']
             && $request->input('redirect_uri') === $claims['redirect_uri']
             && $this->verifierMatches($request->input('code_verifier'), $claims['code_challenge'])
-            && (! $request->filled('resource') || $request->input('resource') === url('/mcp'))
+            && (! $request->filled('resource') || $request->input('resource') === $account->resourceUrl())
             && $this->tokens->consume($claims);
 
-        return $isValid ? $this->issue($claims['client_id']) : $this->error('invalid_grant');
+        return $isValid ? $this->issue($claims['client_id'], $account) : $this->error('invalid_grant');
     }
 
     private function refresh(Request $request): JsonResponse
     {
         $claims = $this->tokens->open($request->input('refresh_token'), SealedTokens::REFRESH);
 
+        // Removing an account from MCP_USERS stops its refresh tokens working.
+        $account = Account::find($claims['user'] ?? null);
+
         $isValid = $claims !== null
+            && $account !== null
             && (! $request->filled('client_id') || $request->input('client_id') === $claims['client_id'])
             && $this->tokens->consume($claims);
 
-        return $isValid ? $this->issue($claims['client_id']) : $this->error('invalid_grant');
+        return $isValid ? $this->issue($claims['client_id'], $account) : $this->error('invalid_grant');
     }
 
     private function verifierMatches(mixed $verifier, string $challenge): bool
@@ -55,20 +62,22 @@ class TokenController
         return hash_equals($challenge, $computed);
     }
 
-    private function issue(string $clientId): JsonResponse
+    private function issue(string $clientId, Account $account): JsonResponse
     {
         $accessTtl = config('connector.access_token_ttl');
         $scope = config('connector.scope');
 
         return response()->json([
             'access_token' => $this->tokens->seal(SealedTokens::ACCESS, [
-                'aud' => url('/mcp'),
+                'aud' => $account->resourceUrl(),
+                'user' => $account->name,
                 'client_id' => $clientId,
                 'scope' => $scope,
             ], $accessTtl),
             'token_type' => 'Bearer',
             'expires_in' => $accessTtl,
             'refresh_token' => $this->tokens->seal(SealedTokens::REFRESH, [
+                'user' => $account->name,
                 'client_id' => $clientId,
             ], config('connector.refresh_token_ttl')),
             'scope' => $scope,

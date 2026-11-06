@@ -2,14 +2,22 @@
 
 namespace App\Http\Controllers\OAuth;
 
+use App\Accounts\Account;
 use Illuminate\Http\JsonResponse;
 
 class MetadataController
 {
-    public function protectedResource(): JsonResponse
+    /** Each account is its own protected resource, found from the path after the well-known prefix. */
+    public function protectedResource(?string $path = null): JsonResponse
     {
+        $account = Account::fromResource(url('/'.$path));
+
+        if ($account === null) {
+            return response()->json(['error' => 'not_found'], 404);
+        }
+
         return response()->json([
-            'resource' => url('/mcp'),
+            'resource' => $account->resourceUrl(),
             'authorization_servers' => [url('/')],
             'scopes_supported' => [config('connector.scope')],
             'bearer_methods_supported' => ['header'],

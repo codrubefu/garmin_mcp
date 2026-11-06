@@ -17,7 +17,13 @@
 <body>
 <main>
     <h1>Connect your Garmin data</h1>
-    <p>This gives <strong>{{ $host }}</strong> read access to your Garmin data.</p>
+    <p>This gives <strong>{{ $host }}</strong> read access to
+        @if ($account)
+            the Garmin data of <strong>{{ $account->name }}</strong>.
+        @else
+            your Garmin data.
+        @endif
+    </p>
     @if ($error)
         <p class="error" role="alert">{{ $error }}</p>
     @endif
@@ -26,8 +32,12 @@
         @foreach ($params as $name => $value)
             <input type="hidden" name="{{ $name }}" value="{{ $value }}">
         @endforeach
+        @unless ($account)
+            <label for="username">User name</label>
+            <input id="username" type="text" name="username" value="{{ request('username') }}" autocomplete="username" autocapitalize="none" required autofocus>
+        @endunless
         <label for="password">Password</label>
-        <input id="password" type="password" name="password" autocomplete="current-password" required autofocus>
+        <input id="password" type="password" name="password" autocomplete="current-password" required @if ($account) autofocus @endif>
         <button type="submit">Allow access</button>
     </form>
 </main>
